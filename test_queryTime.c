@@ -14,7 +14,7 @@
 
 #include "tsdb_api.h"
 #include "seatest.h"
-#include <sys/timex.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
@@ -28,6 +28,12 @@ typedef struct {
     u_int32_t seed;
 } set_container;
 
+#ifndef _GNU_SOURCE
+// There are other systems than GNU ...
+// will be initialilzed in main 
+char* program_invocation_short_name;
+#endif
+
 #define BYTE(X) ((unsigned char *)(X))
 #define PBYTE(X) ((unsigned char **)(X))
 #define DEFAULT_VALUE 1000000
@@ -38,6 +44,25 @@ typedef struct {
 #define RANDOM_FILL 0
 #define CONTIGUOUS_FILL 1
 #define FNAME ".TSDB_test_conf.bin"
+
+static int timeval_subtract(struct timeval *result, struct timeval *x, struct timeval *y) {
+    /* Perform the carry for the later subtraction by updating y. */
+    if (x->tv_usec < y->tv_usec) {
+        int nsec = (y->tv_usec - x->tv_usec) / 1000000 + 1;
+        y->tv_usec -= 1000000 * nsec;
+        y->tv_sec += nsec;
+    }
+    if (x->tv_usec - y->tv_usec > 1000000) {
+        int nsec = (x->tv_usec - y->tv_usec) / 1000000;
+        y->tv_usec += 1000000 * nsec;
+        y->tv_sec -= nsec;
+    }
+    result->tv_sec = x->tv_sec - y->tv_sec;
+    result->tv_usec = x->tv_usec - y->tv_usec;
+    /* Return 1 if result is negative. */
+    return x->tv_sec < y->tv_sec;
+}
+
 
 static void help(int code) {
     printf("test-queryTime (-c DB_file_name | -q DB_file_name | -h ) [-s seed] \n");
@@ -93,41 +118,6 @@ static void process_args(int argc, char *argv[], set_container *settings) {
   }
 }
 
-int timeval_subtract (result, x, y)
-          struct timeval *result, *x, *y;
-     {
-  long int tmp;
-  if (x->tv_sec == y->tv_sec){
-      result->tv_sec = 0;
-      tmp = x->tv_usec - y->tv_usec;
-      if (tmp < 0) {
-          tmp = -tmp;
-      }
-      result->tv_usec = tmp;
-      }
-  else if (x->tv_sec > y->tv_sec){
-      tmp = x->tv_usec - y->tv_usec;
-      if (tmp < 0) {
-          result->tv_sec = x->tv_sec - y->tv_sec -1;
-          result->tv_usec = 1000000 + tmp;
-      }else {
-          result->tv_sec = x->tv_sec - y->tv_sec;
-          result->tv_usec = tmp;
-      }
-  }
-  else {
-      tmp = y->tv_usec - x->tv_usec;
-      if (tmp < 0) {
-          result->tv_sec = y->tv_sec - x->tv_sec -1;
-          result->tv_usec = 1000000 + tmp;
-      } else {
-          result->tv_sec = y->tv_sec - x->tv_sec;
-          result->tv_usec = tmp;
-  }
-     }
-  return 0;
-}
-
 float timeval2float (struct timeval *timestamp) {
 
   return (float)timestamp->tv_sec + (float)timestamp->tv_usec*1E-6;
@@ -153,7 +143,7 @@ void print_tsdb_info(tsdb_handler* handler) {
   fprintf(stdout,"=========== EPOCHS ============\n");
   for(i = 0; i< handler->number_of_epochs; ++i) {
       time2str(&(handler->epoch_list[i]), str, 30);
-      fprintf(stdout,"%5d: %s (%ld)\n", i+1, str, handler->epoch_list[i]);
+      fprintf(stdout,"%5d: %s (%u)\n", i+1, str, handler->epoch_list[i]);
   }
   fprintf(stdout,"===============================\n");
 }
@@ -299,7 +289,7 @@ void populate_DB(set_container* settings, u_int32_t* index, int mode){
     u_int32_t num_Metrics = METRICS_NUM, missed_epochs = 0, j;
     u_int32_t *epoch_to_miss;
     tsdb_value i, transient_value;
-    struct ntptimeval time_start, time_end;
+    struct timeval time_start, time_end;
     struct timeval diff;
     float result = 0;
 
@@ -335,7 +325,7 @@ void populate_DB(set_container* settings, u_int32_t* index, int mode){
     time2str(&first_time, timeStr, 30);
     fprintf(stdout,"Most recent epoch will be (check it!): %s (UTC)\n", timeStr);
 
-    fprintf(stdout,"Start populating DB. Number of columns: %u, number of rows: %lu\n", num_Metrics, num_Epochs);
+    fprintf(stdout,"Start populating DB. Number of columns: %u, number of rows: %u\n", num_Metrics, num_Epochs);
 
     if (mode == RANDOM_FILL) {
         fprintf(stdout,"Using random column indices to write, every write call is affected by uniform time noise\n");
@@ -345,13 +335,13 @@ void populate_DB(set_container* settings, u_int32_t* index, int mode){
 
     for(j=0; j < num_Epochs; j++) {
 
-        ntp_gettime(&time_start);
+        gettimeofday(&time_start, NULL);
 
         if (j == 0) {
             for(i=0; i < num_Metrics; i++){
                 rv = tsdb_goto_epoch(&db_handler, cur_time + j*slot_duration, 0, 1);
                 assert_int_equal(0,rv);
-                sprintf(metric,"metric-%u",i+1);
+                sprintf(metric,"metric-%llu",i+1);
                 rv = tsdb_set(&db_handler,metric,&i);
                 assert_int_equal(0,rv);
             }
@@ -365,16 +355,16 @@ void populate_DB(set_container* settings, u_int32_t* index, int mode){
                 checkTime = cur_time + j*(time_t)slot_duration;
                 normalize_epoch(&db_handler,&checkTime);
                 assert_int_equal(db_handler.chunk.epoch, checkTime);
-                sprintf(metric,"metric-%u", transient_value + 1);
+                sprintf(metric,"metric-%llu", transient_value + 1);
                 rv = tsdb_set(&db_handler, metric, &transient_value);
                 assert_int_equal(0,rv);
             }
         }
 
-        ntp_gettime(&time_end);
-        timeval_subtract(&diff,&time_start.time,&time_end.time);
+        gettimeofday(&time_end, NULL);
+        timeval_subtract(&diff,&time_end,&time_start);
         result += timeval2float(&diff);
-        fprintf(stdout,"Epoch written (attempts): %lu / %lu, for %.6f s\r", j+1, num_Epochs, timeval2float(&diff));
+        fprintf(stdout,"Epoch written (attempts): %u / %u, for %.6f s\r", j+1, num_Epochs, timeval2float(&diff));
         rv=fflush(stdout);
         assert_int_equal(0,rv);
     }
@@ -418,7 +408,7 @@ void query_and_profile_DB(set_container* settings, u_int32_t* index){
   u_int16_t values_per_entry;
   float one_value_read=0, row_read=0;
   tsdb_value **interim_data, *returnedValue;
-  struct ntptimeval time_start, time_end, time_start_long;
+  struct timeval time_start, time_end, time_start_long;
   struct timeval diff;
 
   len = read_conf_file((void **)&epoch_to_miss); //len in bytes
@@ -454,8 +444,7 @@ void query_and_profile_DB(set_container* settings, u_int32_t* index){
     }
 
   /* Test performance of reading 1 column (with index METRICS_NUM/2) in the TSDB */
-  ntp_gettime(&time_start_long);
-
+  gettimeofday(&time_start_long, NULL);
   for(j=0; j < db_handler.number_of_epochs; j++) {
       rv = tsdb_goto_epoch(&db_handler, db_handler.epoch_list[j], 1, 0);
       assert_int_equal(0,rv);
@@ -467,12 +456,12 @@ void query_and_profile_DB(set_container* settings, u_int32_t* index){
       assert_int_equal(index[METRICS_NUM/2],(*interim_data)[j]);
   }
 
-  ntp_gettime(&time_end);
+  gettimeofday(&time_end, NULL);
   tsdb_close(&db_handler);
   free(*interim_data);
   free(interim_data);
 
-  timeval_subtract(&diff,&time_start_long.time,&time_end.time);
+  timeval_subtract(&diff,&time_end,&time_start_long);
   fprintf(stdout,"We have read successfully 1 column in the TSDB. It took: %lu.%06lu s\n",diff.tv_sec,diff.tv_usec);
 
   /* Test performance of reading all columns in the TSDB */
@@ -512,36 +501,36 @@ void query_and_profile_DB(set_container* settings, u_int32_t* index){
       assert_true(interim_data[i] != NULL);
   }
 
-  ntp_gettime(&time_start_long);
+  gettimeofday(&time_start_long, NULL);
   for(j=0; j < db_handler.number_of_epochs; j++) {
       rv = tsdb_goto_epoch(&db_handler, db_handler.epoch_list[j], 1, 0);
       assert_int_equal(0,rv);
 
       /* Profiling time to read a one random value within a row */
-      ntp_gettime(&time_start); i=rand()%METRICS_NUM;
+      gettimeofday(&time_start,NULL); i=rand()%METRICS_NUM;
       rv=tsdb_get_by_index(&db_handler,&index[i],&returnedValue);
                 assert_int_equal(0,rv);
                 interim_data[i][j] = *returnedValue;
                 assert_int_equal(index[i], interim_data[i][j]); //checking if the retrieved value is the one we have stored previously
-      ntp_gettime(&time_end);
-      timeval_subtract(&diff,&time_start.time,&time_end.time);
+      gettimeofday(&time_end, NULL);
+      timeval_subtract(&diff,&time_end,&time_start);
       one_value_read += timeval2float(&diff);
 
       /* Profiling time to read a whole row */
-      ntp_gettime(&time_start);
+      gettimeofday(&time_start, NULL);
       for(i=0;i < METRICS_NUM; ++i){
           rv=tsdb_get_by_index(&db_handler,&index[i],&returnedValue);
           assert_int_equal(0,rv);
           interim_data[i][j] = *returnedValue;
           assert_int_equal(index[i], interim_data[i][j]); //checking if the retrieved value is the one we have stored previously
       }
-      ntp_gettime(&time_end);
-      timeval_subtract(&diff,&time_start.time,&time_end.time);
+      gettimeofday(&time_end, NULL);
+      timeval_subtract(&diff,&time_end,&time_start);
       row_read += timeval2float(&diff);
       //fprintf(stdout,"Time to read %lu random values from the same epoch: %lu.%06lu s\n", METRICS_NUM, diff.tv_sec,diff.tv_usec); fflush(stdout);
   }
 
-  ntp_gettime(&time_end);
+  gettimeofday(&time_end, NULL);
   tsdb_close(&db_handler);
 
   for(i=0;i<METRICS_NUM;++i){
@@ -555,13 +544,17 @@ void query_and_profile_DB(set_container* settings, u_int32_t* index){
   free(epoch_to_miss);
   //free(index);
 
-  timeval_subtract(&diff,&time_start.time,&time_start_long.time);
+  timeval_subtract(&diff,&time_start_long,&time_start);
   fprintf(stdout,"We have read successfully all %u columns in the TSDB. It took: %lu.%06lu s\n",METRICS_NUM,diff.tv_sec,diff.tv_usec);
   fprintf(stdout,"Avg time to read one random element in a row: %.6f\n", one_value_read / NUM_EPOCHS);
   fprintf(stdout,"Avg time to read a row: %.6f\n", row_read / NUM_EPOCHS);
 }
 
 int main(int argc, char *argv[]) {
+#ifndef _GNU_SOURCE
+  // we'll just put the argv[0] as short name on non GNU systems ...
+  program_invocation_short_name = argv[0];
+#endif
   set_container settings;
   u_int32_t *index;
   u_int32_t i;
