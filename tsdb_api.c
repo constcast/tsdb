@@ -20,7 +20,6 @@
 
 #include "tsdb_api.h"
 #include "tsdb_bitmap.h"
-#include "seatest.h"
 
 static void db_put(tsdb_handler *handler,
                    void *key, u_int32_t key_len,
@@ -264,8 +263,6 @@ static void tsdb_flush_chunk(tsdb_handler *handler) {
     }
 
     if (handler->chunk.new_epoch_flag) {
-
-        assert_true(handler->most_recent_epoch < handler->chunk.epoch);
 
         rv = epoch_list_add(handler, handler->chunk.epoch);
         if (rv) {
