@@ -4,11 +4,13 @@ LDFLAGS      = -L /opt/local/lib -L../
 SYSLIBS      = -ldb
 
 TSDB_LIB     = ../libtsdb.a
+TEST_LIBS    = $(TSDB_LIB) ../seatest.o test_core.o
 
 
-TARGETS      = tsdb-get \
-		tsdb-set \
-		tsdb-create
+TARGETS      = test-advanced \
+		test-bitmaps \
+		test-simple \
+		test-tags
 
 all: $(TARGETS)
 
