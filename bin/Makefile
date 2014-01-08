@@ -8,7 +8,8 @@ TSDB_LIB     = ../libtsdb.a
 
 TARGETS      = tsdb-get \
 		tsdb-set \
-		tsdb-create
+		tsdb-create \
+		tsdb-info
 
 all: $(TARGETS)
 
