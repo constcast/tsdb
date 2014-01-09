@@ -349,8 +349,10 @@ void tsdb_close(tsdb_handler *handler) {
         trace_info("Flushing database changes...");
     }
 
-    free(handler->epoch_list);
     handler->db->close(handler->db, 0);
+    if (handler->epoch_list) {
+        free(handler->epoch_list);
+    }
 
     handler->alive = 0;
 }
