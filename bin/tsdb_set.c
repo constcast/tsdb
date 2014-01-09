@@ -15,9 +15,9 @@ static void help(int code) {
     exit(code);
 }
 
-static u_int32_t str_to_uint32(const char *str, const char *argname) {
-    uint num = 0;
-    if (sscanf(str, "%u", &num) == EOF) {
+static u_int64_t str_to_uint64(const char *str, const char *argname) {
+    uint64_t num = 0;
+    if (sscanf(str, "%llu", &num) == EOF) {
         printf("tsdb-set: invalid value for %s\n", argname);
         exit(1);
     }
@@ -39,7 +39,7 @@ static void process_args(int argc, char *argv[], set_args *args) {
             args->verbose = 1;
             break;
         case 't':
-            args->timestamp = str_to_uint32(optarg, "timestamp");
+            args->timestamp = (uint32_t)str_to_uint64(optarg, "timestamp");
             break;
         default:
             help(1);
@@ -93,10 +93,15 @@ static void set_values(tsdb_handler *db, char* key, tsdb_value *values) {
 
 static tsdb_value *alloc_values(set_args *args, int value_count) {
     tsdb_value *values = calloc(value_count, sizeof(tsdb_value));
+    if (!values) {
+         printf("tsdb-set: Could not allocate memory for values!");
+	 exit(1);
+    }
+
     int cur_value = args->values_start;
     int i = 0;
     while (i < value_count && cur_value <= args->values_stop) {
-        values[i++] = str_to_uint32(args->argv[cur_value++], "value");
+        values[i++] = str_to_uint64(args->argv[cur_value++], "value");
     }
     return values;
 }
@@ -108,6 +113,10 @@ static void set_tsdb_values(set_args *args) {
 
     open_db(args->file, &db);
     values = alloc_values(args, db.values_per_entry);
+    if (!values) {
+        printf("tsdb-set: Could not allocate memory for set_tsdb_values!");
+	exit(1);
+    }
     //normalize_epoch(&db, &epoch);
     goto_epoch(&db, epoch);
     set_values(&db, args->key, values);
