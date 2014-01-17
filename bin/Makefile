@@ -16,11 +16,11 @@ all: $(TARGETS)
 %.o: %.c %.h
 	${CC} ${CFLAGS} ${INCLUDE} -c $< -o $@
 
-tsdb-%: tsdb_%.o $(TSDB_LIB) ../seatest.o
-	$(CC) $(LDFLAGS) tsdb_$*.o $(TSDB_LIB) ../seatest.o  $(SYSLIBS) -o $@
+tsdb-%: tsdb_%.o $(TSDB_LIB)
+	$(CC) $(LDFLAGS) tsdb_$*.o $(TSDB_LIB) $(SYSLIBS) -o $@
 
-test-%: test_%.o $(TEST_LIBS) ../seatest.o
-	$(CC) $(LDFLAGS) test_$*.o ../seatest.o $(TEST_LIBS) $(SYSLIBS) -o $@
+test-%: test_%.o $(TEST_LIBS)
+	$(CC) $(LDFLAGS) test_$*.o $(TEST_LIBS) $(SYSLIBS) -o $@
 
 clean:
 	rm -f ${TARGETS} *.o *~ test-* tsdb-*
