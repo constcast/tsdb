@@ -4,7 +4,7 @@ LDFLAGS      = -L /opt/local/lib
 SYSLIBS      = -ldb
 
 TSDB_LIB     = libtsdb.a
-TSDB_LIB_O   = tsdb_api.o tsdb_trace.o tsdb_bitmap.o quicklz.o tsdb_wrapper_api.o tsdb_aux_tools.o
+TSDB_LIB_O   = tsdb_api.o tsdb_trace.o tsdb_bitmap.o quicklz.o tsdb_wrapper_api.o tsdb_aux_tools.o seatest.o
 
 TEST_LIBS    = $(TSDB_LIB) seatest.o
 

@@ -23,22 +23,31 @@ typedef struct {
     int verbose_lvl;
 } set_args;
 
+#ifdef _GNU_SOURCE
+extern char *program_invocation_short_name;
+#else
+static char* program_invocation_short_name;
+#endif
+
+
 static void help(int val) {
-
-fprintf(stdout,"Use: test-concurrency [-v[v]]\n");
-fprintf(stdout,"This unit test checks TSDB API for concurrent access to a DB\n");
-fprintf(stdout,"Upon successful completion with the return code 0, the locking during write feature was implemented and works.\n");
-fprintf(stdout,"Without options only test results are printed\n");
-fprintf(stdout,"-v  enables verbose mode for the main process, \n   which will be checking DB consistency after concurrent writing cycle\n");
-fprintf(stdout,"-vv enables verbose output for all processes this routine creates\n");
-exit(val);
-
+  fprintf(stdout,"Use: test-concurrency [-v[v]]\n");
+  fprintf(stdout,"This unit test checks TSDB API for concurrent access to a DB\n");
+  fprintf(stdout,"Upon successful completion with the return code 0, the locking during write feature was implemented and works.\n");
+  fprintf(stdout,"Without options only test results are printed\n");
+  fprintf(stdout,"-v  enables verbose mode for the main process, \n   which will be checking DB consistency after concurrent writing cycle\n");
+  fprintf(stdout,"-vv enables verbose output for all processes this routine creates\n");
+  exit(val);
 }
 
 static void process_args(int argc, char **argv,set_args *args) {
 
   int c;
   args->verbose_lvl = 0;
+ 
+#ifndef _GNU_SOURCE
+  program_invocation_short_name = argv[0];
+#endif
 
   while ((c = getopt(argc, argv,"v")) != -1) {
       switch (c) {
@@ -60,7 +69,6 @@ static void process_args(int argc, char **argv,set_args *args) {
 }
 
 void ensure_old_dbFile_is_gone(const char* fname) {
-  extern char *program_invocation_short_name;
   if (!strlen(fname)){
       fprintf (stderr, "%s: DB file name is empty\n",
                                         program_invocation_short_name);

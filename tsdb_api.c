@@ -20,6 +20,7 @@
 
 #include "tsdb_api.h"
 #include "tsdb_bitmap.h"
+#include "seatest.h"
 
 static void db_put(tsdb_handler *handler,
                    void *key, u_int32_t key_len,
